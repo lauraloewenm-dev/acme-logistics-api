@@ -1,30 +1,52 @@
+import os
+import requests
 from fastapi import FastAPI, HTTPException
-from typing import Optional
+from pydantic import BaseModel
+from typing import List, Optional
 
-app = FastAPI()
+app = FastAPI(title="Acme Logistics Enterprise API")
 
-# Tu base de datos de cargas (Objetivo 1)
-load_db = [
-    {"load_id": "ES01", "origin": "Madrid", "destination": "Barcelona", "loadboard_rate": 850, "equipment_type": "Lona", "weight": "24,000 kg"},
-    {"load_id": "ES02", "origin": "Valencia", "destination": "Sevilla", "loadboard_rate": 720, "equipment_type": "Frigorífico", "weight": "20,000 kg"},
-    {"load_id": "ES03", "origin": "Bilbao", "destination": "Madrid", "loadboard_rate": 550, "equipment_type": "Lona", "weight": "24,000 kg"},
-    {"load_id": "ES04", "origin": "Zaragoza", "destination": "Málaga", "loadboard_rate": 980, "equipment_type": "Lona", "weight": "22,000 kg"},
-    {"load_id": "ES05", "origin": "Murcia", "destination": "Perpiñán", "loadboard_rate": 1100, "equipment_type": "Frigorífico", "weight": "18,000 kg"},
-    {"load_id": "ES06", "origin": "Valladolid", "destination": "Vigo", "loadboard_rate": 600, "equipment_type": "Cisterna", "weight": "25,000 kg"},
-    {"load_id": "ES07", "origin": "Barcelona", "destination": "Valencia", "loadboard_rate": 450, "equipment_type": "Lona", "weight": "12,000 kg"},
-    {"load_id": "ES08", "origin": "Sevilla", "destination": "Lisboa", "loadboard_rate": 800, "equipment_type": "Lona", "weight": "20,000 kg"},
-    {"load_id": "ES09", "origin": "Gijón", "destination": "Santander", "loadboard_rate": 300, "equipment_type": "Caja abierta", "weight": "5,000 kg"},
-    {"load_id": "ES10", "origin": "Alicante", "destination": "Madrid", "loadboard_rate": 650, "equipment_type": "Lona", "weight": "24,000 kg"}
+# --- BASE DE DATOS EXTENDIDA (USA) ---
+load_board = [
+    {"load_id": "US-9901", "origin": "Chicago, IL", "destination": "Dallas, TX", "pickup_datetime": "2026-04-20 08:00", "delivery_datetime": "2026-04-22 18:00", "equipment_type": "Dry Van", "loadboard_rate": 2400, "weight": 42000, "commodity_type": "Electronics", "num_of_pieces": 22, "miles": 920, "dimensions": "53ft", "hazmat": False, "notes": "No touch freight"},
+    {"load_id": "US-9902", "origin": "Houston, TX", "destination": "Miami, FL", "pickup_datetime": "2026-04-21 06:00", "delivery_datetime": "2026-04-23 12:00", "equipment_type": "Reefer", "loadboard_rate": 3100, "weight": 35000, "commodity_type": "Frozen Food", "num_of_pieces": 18, "miles": 1180, "dimensions": "48ft", "hazmat": False, "notes": "Maintain -10 degrees"},
+    {"load_id": "US-9903", "origin": "Savannah, GA", "destination": "Nashville, TN", "pickup_datetime": "2026-04-20 14:00", "delivery_datetime": "2026-04-21 09:00", "equipment_type": "Flatbed", "loadboard_rate": 1550, "weight": 45000, "commodity_type": "Steel Coils", "num_of_pieces": 4, "miles": 490, "dimensions": "48ft", "hazmat": False, "notes": "Tarping required"},
+    {"load_id": "US-9904", "origin": "Los Angeles, CA", "destination": "Phoenix, AZ", "pickup_datetime": "2026-04-22 07:00", "delivery_datetime": "2026-04-22 20:00", "equipment_type": "Dry Van", "loadboard_rate": 1100, "weight": 12000, "commodity_type": "Textiles", "num_of_pieces": 10, "miles": 370, "dimensions": "53ft", "hazmat": False, "notes": "High value load"},
+    {"load_id": "US-9905", "origin": "Newark, NJ", "destination": "Cleveland, OH", "pickup_datetime": "2026-04-20 10:00", "delivery_datetime": "2026-04-21 06:00", "equipment_type": "Dry Van", "loadboard_rate": 1900, "weight": 38000, "commodity_type": "General Cargo", "num_of_pieces": 24, "miles": 430, "dimensions": "53ft", "hazmat": True, "notes": "Hazmat certified only"},
+    {"load_id": "US-9906", "origin": "Denver, CO", "destination": "Salt Lake City, UT", "pickup_datetime": "2026-04-23 08:00", "delivery_datetime": "2026-04-23 20:00", "equipment_type": "Reefer", "loadboard_rate": 1450, "weight": 40000, "commodity_type": "Produce", "num_of_pieces": 20, "miles": 520, "dimensions": "53ft", "hazmat": False, "notes": "E-track required"},
+    {"load_id": "US-9907", "origin": "Laredo, TX", "destination": "Chicago, IL", "pickup_datetime": "2026-04-21 12:00", "delivery_datetime": "2026-04-24 08:00", "equipment_type": "Dry Van", "loadboard_rate": 3800, "weight": 44000, "commodity_type": "Auto Parts", "num_of_pieces": 26, "miles": 1350, "dimensions": "53ft", "hazmat": False, "notes": "Team drivers preferred"},
+    {"load_id": "US-9908", "origin": "Seattle, WA", "destination": "Portland, OR", "pickup_datetime": "2026-04-20 09:00", "delivery_datetime": "2026-04-20 15:00", "equipment_type": "Flatbed", "loadboard_rate": 850, "weight": 48000, "commodity_type": "Lumber", "num_of_pieces": 12, "miles": 175, "dimensions": "48ft", "hazmat": False, "notes": "Side kit needed"},
+    {"load_id": "US-9909", "origin": "Atlanta, GA", "destination": "Charlotte, NC", "pickup_datetime": "2026-04-22 11:00", "delivery_datetime": "2026-04-22 17:00", "equipment_type": "Dry Van", "loadboard_rate": 950, "weight": 15000, "commodity_type": "Paper Products", "num_of_pieces": 14, "miles": 245, "dimensions": "53ft", "hazmat": False, "notes": "Quick turn around"},
+    {"load_id": "US-9910", "origin": "Kansas City, MO", "destination": "Columbus, OH", "pickup_datetime": "2026-04-21 16:00", "delivery_datetime": "2026-04-22 10:00", "equipment_type": "Reefer", "loadboard_rate": 1750, "weight": 30000, "commodity_type": "Dairy", "num_of_pieces": 16, "miles": 650, "dimensions": "53ft", "hazmat": False, "notes": "Washout receipt required"}
 ]
 
-@app.get("/")
-def home():
-    return {"status": "Acme Logistics API is running"}
+FMCSA_API_KEY = os.getenv("FMCSA_KEY")
 
-@app.get("/get-load")
-def get_load(origin: str):
-    # Busca la carga que coincida con el origen que diga el camionero
-    load = next((l for l in load_db if origin.lower() in l["origin"].lower()), None)
-    if load:
-        return load
-    raise HTTPException(status_code=404, detail="No loads found for this location")
+# --- ENDPOINTS ---
+
+@app.get("/verify-carrier/{mc_number}")
+def verify_carrier(mc_number: str):
+    url = f"https://mobile.fmcsa.dot.gov/qc/services/get-carrier-data.json?number={mc_number}&key={FMCSA_API_KEY}"
+    try:
+        response = requests.get(url, timeout=5).json()
+        if "content" in response and response["content"]:
+            carrier = response["content"][0]["carrier"]
+            status = carrier.get("commonStatus", "")
+            if status == "Active" or status == "Authorized":
+                return {"valid": True, "name": carrier.get("legalName"), "status": status}
+        return {"valid": False, "message": "Carrier not authorized or inactive."}
+    except:
+        return {"valid": False, "message": "Verification system unavailable."}
+
+@app.get("/get-loads")
+def get_loads(origin: str, equipment: Optional[str] = None):
+    # Filtramos por ciudad (ignorando mayúsculas)
+    results = [l for l in load_board if origin.lower() in l["origin"].lower()]
+    
+    if equipment:
+        results = [l for l in results if equipment.lower() in l["equipment_type"].lower()]
+    
+    if not results:
+        raise HTTPException(status_code=404, detail="No loads found for this criteria.")
+    
+    return results
