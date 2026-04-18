@@ -6,15 +6,22 @@ st.set_page_config(page_title="Acme Logistics Dashboard", layout="wide")
 
 st.title("📊 Acme Logistics - Call Analytics")
 
-# 1. Hacemos la petición a nuestra propia API para leer los datos
 API_URL = "https://acme-logistics-api-production.up.railway.app/get-logs"
 
 try:
     response = requests.get(API_URL)
     data = response.json()
     
-    if not data:
-        st.info("No hay llamadas registradas todavía. ¡Haz una llamada de prueba!")
+    # --- ESCUDO DE DEPURACIÓN ---
+    # Si la API nos devuelve un diccionario (error o mensaje) en lugar de una lista
+    if isinstance(data, dict):
+        st.warning(f"⚠️ La API no devolvió una lista de llamadas. Respondió esto: {data}")
+    
+    # Si la API devuelve una lista vacía
+    elif not data:
+        st.info("No hay llamadas registradas todavía. ¡Haz una llamada de prueba con Laura!")
+        
+    # Si la API devuelve los datos correctamente
     else:
         df = pd.DataFrame(data)
         
@@ -39,8 +46,7 @@ try:
             
         with col_table:
             st.subheader("Registro Detallado")
-            # Mostramos la tabla limpia
             st.dataframe(df[['timestamp', 'carrier_name', 'call_outcome', 'agreed_rate', 'carrier_sentiment']])
             
 except Exception as e:
-    st.error(f"Error conectando con la API: {e}")
+    st.error(f"Error crítico conectando con la API: {e}")
