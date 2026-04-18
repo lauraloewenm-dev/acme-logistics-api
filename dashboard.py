@@ -7,7 +7,7 @@ st.set_page_config(page_title="Acme Logistics Dashboard", layout="wide")
 st.title("📊 Acme Logistics - Call Analytics")
 
 # 1. Hacemos la petición a nuestra propia API para leer los datos
-API_URL = "https://tu-api.railway.app/get-logs"
+API_URL = "https://acme-logistics-api-production.up.railway.app/get-logs"
 
 try:
     response = requests.get(API_URL)
