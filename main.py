@@ -6,7 +6,7 @@ from typing import List, Optional
 
 app = FastAPI(title="Acme Logistics Enterprise API")
 
-# --- BASE DE DATOS EXTENDIDA (USA) ---
+
 load_board = [
     {"load_id": "US-9901", "origin": "Chicago, IL", "destination": "Dallas, TX", "pickup_datetime": "2026-04-20 08:00", "delivery_datetime": "2026-04-22 18:00", "equipment_type": "Dry Van", "loadboard_rate": 2400, "weight": 42000, "commodity_type": "Electronics", "num_of_pieces": 22, "miles": 920, "dimensions": "53ft", "hazmat": False, "notes": "No touch freight"},
     {"load_id": "US-9902", "origin": "Houston, TX", "destination": "Miami, FL", "pickup_datetime": "2026-04-21 06:00", "delivery_datetime": "2026-04-23 12:00", "equipment_type": "Reefer", "loadboard_rate": 3100, "weight": 35000, "commodity_type": "Frozen Food", "num_of_pieces": 18, "miles": 1180, "dimensions": "48ft", "hazmat": False, "notes": "Maintain -10 degrees"},
@@ -50,3 +50,36 @@ def get_loads(origin: str, equipment: Optional[str] = None):
         raise HTTPException(status_code=404, detail="No loads found for this criteria.")
     
     return results
+
+#------------------------------
+# Save call logs
+#--------------------------------
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+
+call_logs = []
+
+
+class CallSummary(BaseModel):
+    load_id: Optional[str] = None
+    carrier_name: Optional[str] = None
+    mc_number: Optional[str] = None
+    initial_rate: Optional[int] = None
+    agreed_rate: Optional[int] = None
+    call_outcome: str
+    carrier_sentiment: str
+
+# 3. Endpoint POST: Para que Laura nos envíe los datos al terminar
+@app.post("/log-call")
+def log_call(summary: CallSummary):
+    log_entry = summary.dict()
+    log_entry["timestamp"] = datetime.now().isoformat()
+    call_logs.append(log_entry)
+    return {"status": "success", "message": "Call logged successfully"}
+
+# 4. Endpoint GET: Para que nuestro Dashboard pueda leer los datos
+@app.get("/get-logs")
+def get_logs():
+    return call_logs
