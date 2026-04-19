@@ -5,17 +5,18 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, Request
 from pydantic import BaseModel
-from fastapi.staticfiles import StaticFiles # Importación necesaria
-from fpdf import FPDF # Importación necesaria
+from fastapi.staticfiles import StaticFiles
+from fpdf import FPDF
 
 app = FastAPI(title="Acme Logistics Enterprise API")
 
 # --- 📁 CONFIGURACIÓN DE ARCHIVOS ESTÁTICOS ---
-# Esto debe ir antes de los endpoints para que la carpeta exista al arrancar
-if not os.path.exists("static"):
-    os.makedirs("static")
+# Esto DEBE ir al principio para evitar errores de ruta
+static_path = os.path.join(os.getcwd(), "static")
+if not os.path.exists(static_path):
+    os.makedirs(static_path)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # --- 🔒 SEGURIDAD ---
 API_KEY_SECRET = os.getenv("MY_API_KEY", "super-secret-acme-key")
@@ -31,20 +32,20 @@ def verify_api_key(request: Request):
             return token
     raise HTTPException(status_code=403, detail="Acceso denegado: API Key inválida")
 
-# --- 📦 BASE DE DATOS DINÁMICA ---
+# --- 📦 BASE DE DATOS ---
 def generar_base_de_datos(cantidad=150):
     ciudades = ["Chicago, IL", "Dallas, TX", "Miami, FL", "Los Angeles, CA", "Newark, NJ", "Atlanta, GA", "Denver, CO", "Seattle, WA", "Phoenix, AZ", "Columbus, OH", "Savannah, GA", "Houston, TX", "Charlotte, NC", "Kansas City, MO", "Laredo, TX"]
     equipos_info = {
-        "Dry Van": {"commodities": ["Electronics", "Auto Parts", "Textiles"], "dims": "53ft"},
-        "Reefer": {"commodities": ["Produce", "Frozen Food", "Dairy"], "dims": "53ft"},
-        "Flatbed": {"commodities": ["Lumber", "Steel Coils", "Machinery"], "dims": "48ft"}
+        "Dry Van": {"commodities": ["Electronics", "Auto Parts"], "dims": "53ft"},
+        "Reefer": {"commodities": ["Produce", "Frozen Food"], "dims": "53ft"},
+        "Flatbed": {"commodities": ["Lumber", "Steel Coils"], "dims": "48ft"}
     }
     nuevas_cargas = []
     for i in range(1, cantidad + 1):
         origen = random.choice(ciudades)
         destino = random.choice([c for c in ciudades if c != origen])
         equipo = random.choice(list(equipos_info.keys()))
-        carga = {
+        nuevas_cargas.append({
             "load_id": f"US-{9000 + i}",
             "origin": origen,
             "destination": destino,
@@ -55,8 +56,7 @@ def generar_base_de_datos(cantidad=150):
             "weight": random.randint(15, 45) * 1000,
             "commodity_type": random.choice(equipos_info[equipo]["commodities"]),
             "status": "Available"
-        }
-        nuevas_cargas.append(carga)
+        })
     return nuevas_cargas
 
 load_board = generar_base_de_datos(150)
@@ -70,10 +70,18 @@ class CallSummary(BaseModel):
 
 # --- 🚀 ENDPOINTS ---
 
+@app.get("/verify-carrier/{mc_number}", dependencies=[Depends(verify_api_key)])
+def verify_carrier(mc_number: str):
+    # Simulación robusta para que siempre devuelva un nombre si falla la API externa
+    nombres_fake = ["Blue Anchor Trans", "Swift Haulage Inc", "Eagle Eye Logistics", "Summit Trucking"]
+    nombre_elegido = nombres_fake[int(mc_number) % len(nombres_fake)] if mc_number.isdigit() else "Ace Logistics"
+    return {"valid": True, "name": f"{nombre_elegido} (MC {mc_number})", "status": "Active"}
+
 @app.get("/get-loads", dependencies=[Depends(verify_api_key)])
 def get_loads(origin: str):
     search_origin = origin.lower().strip()
-    return {"match_found": True, "loads": [l for l in load_board if search_origin in l["origin"].lower() and l["status"] == "Available"]}
+    match = [l for l in load_board if search_origin in l["origin"].lower() and l["status"] == "Available"]
+    return {"match_found": len(match) > 0, "loads": match}
 
 @app.post("/log-call", dependencies=[Depends(verify_api_key)])
 def log_call(summary: CallSummary):
@@ -104,7 +112,7 @@ def generate_pdf(request: Request, load_id: str, carrier_name: Optional[str] = "
     pdf.cell(200, 10, txt=f"Agreed Rate: ${numeric_rate}.00", ln=True)
     
     file_name = f"confirmation_{load_id}.pdf"
-    file_path = f"static/{file_name}"
+    file_path = os.path.join(static_path, file_name)
     pdf.output(file_path)
     
     base_url = str(request.base_url).rstrip("/")
