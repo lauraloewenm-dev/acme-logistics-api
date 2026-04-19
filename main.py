@@ -119,6 +119,7 @@ class CallSummary(BaseModel):
     mc_number: Optional[str] = None
     initial_rate: Optional[int] = None
     agreed_rate: Optional[int] = None
+    call_summary: Optional[str] = None 
     call_outcome: str
     carrier_sentiment: str
 
