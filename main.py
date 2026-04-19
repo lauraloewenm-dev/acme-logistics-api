@@ -28,34 +28,33 @@ FMCSA_API_KEY = os.getenv("FMCSA_KEY")
 @app.get("/verify-carrier/{mc_number}")
 def verify_carrier(mc_number: str):
     api_key = os.getenv("FMCSA_KEY")
-    
-    # La URL oficial corregida con "webKey"
     url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/docket-number/{mc_number}?webKey={api_key}"
-    
-    # El disfraz de navegador
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status() # Esto hará saltar el error si hay un 403
         data = response.json()
         
         if "content" in data and data["content"]:
-            carrier = data["content"][0]["carrier"]
-            status = carrier.get("statusCode", "")
-            allowed = carrier.get("allowedToOperate", "N")
+            carrier = data["content"][0].get("carrier", {})
+            # Usamos .strip() por si el gobierno manda espacios en blanco
+            status = str(carrier.get("statusCode", "")).strip()
+            allowed = str(carrier.get("allowedToOperate", "")).strip()
             
-            # El gobierno usa statusCode 'A' para Activo y allowedToOperate 'Y' para Yes
+            # Si tiene permiso de operación o estatus activo, ADELANTE
             if status == "A" or allowed == "Y":
-                return {"valid": True, "name": carrier.get("legalName"), "status": "Active"}
-                
+                return {
+                    "valid": True, 
+                    "name": carrier.get("legalName", "Unknown Carrier"), 
+                    "status": "Active"
+                }
+        
+        # Si llega aquí, imprimimos en los logs de Railway para saber qué pasó
+        print(f"DEBUG: MC {mc_number} rechazado. Data: {data}")
         return {"valid": False, "message": "Carrier not authorized or inactive."}
         
     except Exception as e:
-        # Si Railway choca contra el muro, HappyRobot nos mostrará este mensaje exacto
-        return {"valid": False, "message": f"Fallo desde Railway: {str(e)}"}
+        return {"valid": False, "message": f"Error: {str(e)}"}
 
 @app.get("/get-loads")
 def get_loads(origin: str, equipment: Optional[str] = None):
