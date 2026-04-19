@@ -88,7 +88,7 @@ def get_loads(origin: str):
 def log_call(summary: CallSummary):
     if summary.call_outcome == "Booked" and summary.load_id:
         for load in load_board:
-            if load["load_id"] == summary.load_id:
+            if load["load_id"].lower().strip() == load_id.lower().strip():
                 load["status"] = "Booked"
                 break
     call_logs.append(summary.dict())
