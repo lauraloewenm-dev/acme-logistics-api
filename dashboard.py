@@ -7,7 +7,7 @@ import random
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Acme Analytics | AI Dispatch", page_icon="🚛", layout="wide")
 
-API_URL = "https://acme-logistics-api-production-xxxx.up.railway.app" # <-- ¡PON TU URL AQUÍ!
+API_URL = "https://acme-logistics-api-production.up.railway.app" # <-- ¡PON TU URL AQUÍ!
 API_KEY = "super-secret-acme-key" 
 
 st.title("🚛 Acme Logistics: AI Operations Command Center")
