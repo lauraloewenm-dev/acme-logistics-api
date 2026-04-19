@@ -2,21 +2,33 @@ import os
 import requests
 from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Security, Depends
-from fastapi.security import APIKeyHeader
+# IMPORTANTE: Hemos añadido 'Request' aquí
+from fastapi import FastAPI, HTTPException, Depends, Request
 from pydantic import BaseModel
 
 app = FastAPI(title="Acme Logistics Enterprise API")
 
-# --- 🔒 CONFIGURACIÓN DE SEGURIDAD (API KEY) ---
-# Si no hay variable de entorno, usa 'super-secret-acme-key' por defecto
+# --- 🔒 CONFIGURACIÓN DE SEGURIDAD (TODOTERRENO) ---
 API_KEY_SECRET = os.getenv("MY_API_KEY", "super-secret-acme-key")
-api_key_header = APIKeyHeader(name="X-API-Key")
 
-def verify_api_key(api_key: str = Security(api_key_header)):
-    if api_key != API_KEY_SECRET:
-        raise HTTPException(status_code=403, detail="Acceso denegado: API Key inválida")
-    return api_key
+def verify_api_key(request: Request):
+    # Opción 1: Comprueba si HappyRobot lo mandó como Header personalizado (X-API-Key)
+    api_key = request.headers.get("X-API-Key")
+    if api_key == API_KEY_SECRET:
+        return api_key
+        
+    # Opción 2: Comprueba si lo mandó por el desplegable "Authorization" (Bearer Token)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1] # Extrae solo la clave sin la palabra "Bearer"
+        if token == API_KEY_SECRET:
+            return token
+            
+    # Si no llega de ninguna de las dos formas o está mal, bloqueamos
+    raise HTTPException(status_code=403, detail="Acceso denegado: API Key inválida")
+
+# --- 📦 BASE DE DATOS SIMULADA ---
+# (A partir de aquí, deja tu load_board y el resto del código exactamente igual)
 
 
 # --- 📦 BASE DE DATOS SIMULADA ---
