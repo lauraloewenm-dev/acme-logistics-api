@@ -6,3 +6,5 @@ streamlit
 plotly
 fpdf2
 python-multipart
+sqlalchemy
+psycopg2-binary
