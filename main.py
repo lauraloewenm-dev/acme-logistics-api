@@ -64,14 +64,23 @@ def verify_carrier(mc_number: str):
 
 @app.get("/get-loads")
 def get_loads(origin: str, equipment: Optional[str] = None):
-    # Filtramos por ciudad (ignorando mayúsculas)
-    results = [l for l in load_board if origin.lower() in l["origin"].lower()]
+    # 1. Limpiamos el origen (quitamos espacios y pasamos a minúsculas)
+    search_origin = origin.lower().strip()
     
+    # 2. Filtramos por ciudad
+    # Usamos "in" para que si el agente dice "Chicago" lo encuentre en "Chicago, IL"
+    results = [l for l in load_board if search_origin in l["origin"].lower()]
+    
+    # 3. Filtramos por equipo (si se proporciona)
     if equipment:
-        results = [l for l in results if equipment.lower() in l["equipment_type"].lower()]
+        search_equip = equipment.lower().strip()
+        # Buscamos coincidencias parciales (ej: "van" en "Dry Van")
+        results = [l for l in results if search_equip in l["equipment_type"].lower()]
     
     if not results:
-        raise HTTPException(status_code=404, detail="No loads found for this criteria.")
+        # En lugar de un error 404 seco, devolvemos una lista vacía
+        # para que Laura pueda decir "I don't have any loads there right now."
+        return []
     
     return results
 
