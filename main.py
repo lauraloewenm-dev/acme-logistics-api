@@ -8,14 +8,16 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 
+# --- 🗄️ IMPORTACIONES DE BASE DE DATOS (NUEVO) ---
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Text
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+
 app = FastAPI(title="Acme Logistics Enterprise API")
 
 # --- 📁 CONFIGURACIÓN DE ARCHIVOS ESTÁTICOS ---
-# Crea la carpeta para que los PDFs sean accesibles vía URL
 static_path = os.path.join(os.getcwd(), "static")
 if not os.path.exists(static_path):
     os.makedirs(static_path)
-
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # --- 🔒 SEGURIDAD (API KEY) ---
@@ -23,49 +25,66 @@ API_KEY_SECRET = os.getenv("MY_API_KEY", "super-secret-acme-key")
 
 def verify_api_key(request: Request):
     api_key = request.headers.get("X-API-Key")
-    if api_key == API_KEY_SECRET:
-        return api_key
+    if api_key == API_KEY_SECRET: return api_key
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-        if token == API_KEY_SECRET:
-            return token
-    raise HTTPException(status_code=403, detail="Acceso denegado: API Key inválida")
+        if auth_header.split(" ")[1] == API_KEY_SECRET: return auth_header.split(" ")[1]
+    raise HTTPException(status_code=403, detail="Acceso denegado")
 
-# --- 📦 BASE DE DATOS DINÁMICA ---
-def generar_base_de_datos(cantidad=150):
-    ciudades = ["Chicago, IL", "Dallas, TX", "Miami, FL", "Los Angeles, CA", "Newark, NJ", "Atlanta, GA", "Denver, CO", "Seattle, WA", "Phoenix, AZ", "Columbus, OH", "Savannah, GA", "Houston, TX", "Charlotte, NC", "Kansas City, MO", "Laredo, TX"]
-    equipos_info = {
-        "Dry Van": {"commodities": ["Electronics", "Auto Parts", "Textiles"], "dims": "53ft"},
-        "Reefer": {"commodities": ["Produce", "Frozen Food", "Dairy"], "dims": "53ft"},
-        "Flatbed": {"commodities": ["Lumber", "Steel Coils", "Machinery"], "dims": "48ft"}
-    }
-    nuevas_cargas = []
-    for i in range(1, cantidad + 1):
-        origen = random.choice(ciudades)
-        destino = random.choice([c for c in ciudades if c != origen])
-        equipo = random.choice(list(equipos_info.keys()))
-        nuevas_cargas.append({
-            "load_id": f"US-{9000 + i}",
-            "origin": origen,
-            "destination": destino,
-            "pickup_datetime": (datetime.now() + timedelta(days=random.randint(0, 5))).strftime("%Y-%m-%d 08:00"),
-            "delivery_datetime": (datetime.now() + timedelta(days=random.randint(6, 10))).strftime("%Y-%m-%d 16:00"),
-            "equipment_type": equipo,
-            "loadboard_rate": random.randint(80, 450) * 10,
-            "weight": random.randint(15, 45) * 1000,
-            "commodity_type": random.choice(equipos_info[equipo]["commodities"]),
-            "hazmat": random.choice([True, False, False]),
-            "notes": "No touch freight, clean trailer required.",
-            "status": "Available"
-        })
-    return nuevas_cargas
+# --- 🗄️ CONFIGURACIÓN DE POSTGRESQL (NUEVO) ---
+# Railway usa DATABASE_URL. Si pruebas en local y no existe, crea un archivo SQLite.
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./acme_local.db")
 
-# Generamos la base de datos en memoria al arrancar
-load_board = generar_base_de_datos(150)
-call_logs = []
+# Corrección de compatibilidad para Railway/Heroku
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# --- 📋 MODELOS DE DATOS ---
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Dependencia para obtener la sesión de la base de datos en cada endpoint
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# --- 📊 MODELOS DE TABLAS DE BASE DE DATOS (NUEVO) ---
+class LoadDB(Base):
+    __tablename__ = "loads"
+    id = Column(Integer, primary_key=True, index=True)
+    load_id = Column(String, unique=True, index=True)
+    origin = Column(String)
+    destination = Column(String)
+    pickup_datetime = Column(String)
+    delivery_datetime = Column(String)
+    equipment_type = Column(String)
+    loadboard_rate = Column(Integer)
+    weight = Column(Integer)
+    commodity_type = Column(String)
+    hazmat = Column(Boolean)
+    notes = Column(Text)
+    status = Column(String, default="Available")
+
+class CallLogDB(Base):
+    __tablename__ = "call_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    load_id = Column(String)
+    carrier_name = Column(String)
+    mc_number = Column(String)
+    initial_rate = Column(Integer)
+    agreed_rate = Column(Integer)
+    call_summary = Column(Text)
+    call_outcome = Column(String)
+    carrier_sentiment = Column(String)
+    timestamp = Column(String)
+
+# Creamos las tablas en la base de datos
+Base.metadata.create_all(bind=engine)
+
+# --- 📋 MODELOS DE PYDANTIC (Para recibir datos del Webhook) ---
 class CallSummary(BaseModel):
     load_id: Optional[Any] = "Unknown"
     carrier_name: Optional[Any] = "Unknown"
@@ -75,6 +94,40 @@ class CallSummary(BaseModel):
     call_summary: Optional[Any] = ""
     call_outcome: Optional[Any] = ""
     carrier_sentiment: Optional[Any] = ""
+
+# --- 📦 POBLAR BASE DE DATOS AL ARRANCAR (NUEVO) ---
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    # Si la tabla de cargas está vacía, generamos 150 cargas iniciales
+    if db.query(LoadDB).count() == 0:
+        ciudades = ["Chicago, IL", "Dallas, TX", "Miami, FL", "Los Angeles, CA", "Newark, NJ", "Atlanta, GA", "Denver, CO", "Seattle, WA"]
+        equipos_info = {"Dry Van": ["Electronics", "Auto Parts"], "Reefer": ["Produce", "Frozen Food"], "Flatbed": ["Lumber", "Steel"]}
+        
+        for i in range(1, 151):
+            origen = random.choice(ciudades)
+            destino = random.choice([c for c in ciudades if c != origen])
+            equipo = random.choice(list(equipos_info.keys()))
+            
+            nueva_carga = LoadDB(
+                load_id=f"US-{9000 + i}",
+                origin=origen,
+                destination=destino,
+                pickup_datetime=(datetime.now() + timedelta(days=random.randint(0, 5))).strftime("%Y-%m-%d 08:00"),
+                delivery_datetime=(datetime.now() + timedelta(days=random.randint(6, 10))).strftime("%Y-%m-%d 16:00"),
+                equipment_type=equipo,
+                loadboard_rate=random.randint(80, 450) * 10,
+                weight=random.randint(15, 45) * 1000,
+                commodity_type=random.choice(equipos_info[equipo]),
+                hazmat=random.choice([True, False, False]),
+                notes="No touch freight, clean trailer required.",
+                status="Available"
+            )
+            db.add(nueva_carga)
+        db.commit()
+        print("✅ Base de datos PostgreSQL poblada con 150 cargas.")
+    db.close()
+
 
 # --- 🎨 CLASE PDF PROFESIONAL ---
 class AcmeConfirmationPDF(FPDF):
@@ -96,7 +149,8 @@ class AcmeConfirmationPDF(FPDF):
         self.set_text_color(150)
         self.cell(0, 10, 'Automated Document - No Signature Required', align='C')
 
-# --- 🚀 ENDPOINTS ---
+
+# --- 🚀 ENDPOINTS ACTUALIZADOS PARA POSTGRESQL ---
 
 @app.get("/verify-carrier/{mc_number}", dependencies=[Depends(verify_api_key)])
 def verify_carrier(mc_number: str):
@@ -105,55 +159,76 @@ def verify_carrier(mc_number: str):
     return {"valid": True, "name": f"{nombre_elegido} (MC {mc_number})", "status": "Active"}
 
 @app.get("/get-loads", dependencies=[Depends(verify_api_key)])
-def get_loads(origin: str):
+def get_loads(origin: str, db: Session = Depends(get_db)):
     search_origin = origin.lower().strip()
-    match = [l for l in load_board if search_origin in l["origin"].lower() and l["status"] == "Available"]
+    # Buscar en la base de datos real con ILIKE (insensible a mayúsculas)
+    match = db.query(LoadDB).filter(LoadDB.origin.ilike(f"%{search_origin}%"), LoadDB.status == "Available").all()
     return {"match_found": len(match) > 0, "loads": match}
 
-@app.post("/log-call") # Sin dependencia para asegurar que el dashboard reciba datos
-def log_call(summary: CallSummary):
+@app.post("/log-call") 
+def log_call(summary: CallSummary, db: Session = Depends(get_db)):
     try:
-        log_entry = summary.dict()
-        log_entry["timestamp"] = datetime.now().isoformat()
-        call_logs.append(log_entry)
+        # 1. Limpiamos los números por si vienen con símbolos ($ o comas)
+        def clean_number(val):
+            try:
+                return int(float(str(val).replace('$', '').replace(',', '').strip()))
+            except:
+                return 0
 
-        # Actualizar estado a Booked
+        agreed_clean = clean_number(summary.agreed_rate)
+        initial_clean = clean_number(summary.initial_rate)
+
+        # 2. Guardamos el log en la base de datos
+        nuevo_log = CallLogDB(
+            load_id=str(summary.load_id),
+            carrier_name=str(summary.carrier_name),
+            mc_number=str(summary.mc_number),
+            initial_rate=initial_clean,
+            agreed_rate=agreed_clean,
+            call_summary=str(summary.call_summary),
+            call_outcome=str(summary.call_outcome),
+            carrier_sentiment=str(summary.carrier_sentiment),
+            timestamp=datetime.now().isoformat()
+        )
+        db.add(nuevo_log)
+
+        # 3. Si es "Booked", actualizamos la carga en la base de datos
         target_id = str(summary.load_id).strip()
         outcome = str(summary.call_outcome).lower()
 
         if "booked" in outcome and target_id:
-            for load in load_board:
-                if load["load_id"] == target_id:
-                    load["status"] = "Booked"
-                    break
+            load = db.query(LoadDB).filter(LoadDB.load_id == target_id).first()
+            if load:
+                load.status = "Booked"
+        
+        db.commit() # Guardar todos los cambios permanentemente
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        db.rollback() # Si falla, deshacemos para no corromper la BD
+        print(f"Error Database: {e}")
+        return {"status": "error", "message": "Salvado por bypass interno"}
 
 @app.get("/generate-pdf/{load_id}", dependencies=[Depends(verify_api_key)])
-def generate_pdf(request: Request, load_id: str, carrier_name: str = "Carrier", rate: str = "0"):
-    # Buscar datos de la carga en memoria
-    current_load = next((l for l in load_board if l["load_id"] == load_id), None)
+def generate_pdf(request: Request, load_id: str, carrier_name: str = "Carrier", rate: str = "0", db: Session = Depends(get_db)):
+    # Buscar carga en BD
+    current_load = db.query(LoadDB).filter(LoadDB.load_id == load_id).first()
     if not current_load:
         raise HTTPException(status_code=404, detail="Load ID not found")
 
-    # Limpieza de precio
     try:
         numeric_rate = int(str(rate).replace("$", "").replace(",", "").split(".")[0])
     except:
         numeric_rate = 0
 
-    # Crear PDF
     pdf = AcmeConfirmationPDF()
     pdf.add_page()
     pdf.set_font('Helvetica', 'B', 16)
     pdf.cell(0, 15, 'OFFICIAL RATE CONFIRMATION', ln=True, align='C')
-    
     pdf.set_font('Helvetica', '', 12)
     pdf.ln(5)
     pdf.cell(0, 10, f"Load ID: {load_id}", ln=True)
     pdf.cell(0, 10, f"Carrier: {carrier_name}", ln=True)
-    pdf.cell(0, 10, f"Origin: {current_load['origin']} -> Destination: {current_load['destination']}", ln=True)
+    pdf.cell(0, 10, f"Origin: {current_load.origin} -> Destination: {current_load.destination}", ln=True)
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 10, f"Agreed Total Rate: ${numeric_rate:,.2f}", ln=True)
     
@@ -165,25 +240,21 @@ def generate_pdf(request: Request, load_id: str, carrier_name: str = "Carrier", 
     return {"status": "success", "pdf_url": f"{base_url}/static/{file_name}"}
 
 @app.get("/get-logs", dependencies=[Depends(verify_api_key)])
-def get_logs():
-    # Creamos una copia de los logs para no romper la memoria
-    processed_logs = []
-    
-    for log in call_logs:
-        new_log = log.copy()
-        try:
-            # Limpiamos y convertimos agreed_rate a número
-            agreed = str(new_log.get('agreed_rate', '0')).replace('$', '').replace(',', '').strip()
-            new_log['agreed_rate'] = int(float(agreed)) if agreed else 0
-            
-            # Limpiamos y convertimos initial_rate a número
-            initial = str(new_log.get('initial_rate', '0')).replace('$', '').replace(',', '').strip()
-            new_log['initial_rate'] = int(float(initial)) if initial else 0
-        except:
-            # Si falla la conversión, ponemos 0 para que el dashboard no explote
-            new_log['agreed_rate'] = 0
-            new_log['initial_rate'] = 0
-            
-        processed_logs.append(new_log)
-        
-    return processed_logs
+def get_logs(db: Session = Depends(get_db)):
+    # Devolver logs desde la BD
+    logs = db.query(CallLogDB).all()
+    # Convertimos los objetos SQLAlchemy a diccionarios para que el Dashboard (Pandas) los lea
+    return [
+        {
+            "load_id": log.load_id,
+            "carrier_name": log.carrier_name,
+            "mc_number": log.mc_number,
+            "initial_rate": log.initial_rate,
+            "agreed_rate": log.agreed_rate,
+            "call_summary": log.call_summary,
+            "call_outcome": log.call_outcome,
+            "carrier_sentiment": log.carrier_sentiment,
+            "timestamp": log.timestamp
+        }
+        for log in logs
+    ]
