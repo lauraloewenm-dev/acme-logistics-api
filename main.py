@@ -64,26 +64,44 @@ def verify_carrier(mc_number: str):
 
 @app.get("/get-loads")
 def get_loads(origin: str, equipment: Optional[str] = None):
-    # 1. Limpiamos el origen (quitamos espacios y pasamos a minúsculas)
     search_origin = origin.lower().strip()
     
-    # 2. Filtramos por ciudad
-    # Usamos "in" para que si el agente dice "Chicago" lo encuentre en "Chicago, IL"
-    results = [l for l in load_board if search_origin in l["origin"].lower()]
+    # 1. Obtenemos TODAS las cargas en esa ciudad primero
+    city_loads = [l for l in load_board if search_origin in l["origin"].lower()]
     
-    # 3. Filtramos por equipo (si se proporciona)
+    # Si de verdad no hay nada en esa ciudad, se lo decimos claro
+    if not city_loads:
+        return {
+            "match_found": False, 
+            "message": f"No loads available in {origin} at the moment."
+        }
+    
+    # 2. Si el transportista especifica un equipo, buscamos si hay match
     if equipment:
         search_equip = equipment.lower().strip()
-        # Buscamos coincidencias parciales (ej: "van" en "Dry Van")
-        results = [l for l in results if search_equip in l["equipment_type"].lower()]
-    
-    if not results:
-        # En lugar de un error 404 seco, devolvemos una lista vacía
-        # para que Laura pueda decir "I don't have any loads there right now."
-        return []
-    
-    return results
+        exact_matches = [l for l in city_loads if search_equip in l["equipment_type"].lower()]
+        
+        # Si hay lo que busca, se lo damos
+        if exact_matches:
+            return {
+                "match_found": True, 
+                "loads": exact_matches
+            }
 
+        else:
+            equipos_disponibles = list(set([l["equipment_type"] for l in city_loads]))
+            return {
+                "match_found": False,
+                "message": f"No {equipment} loads found, but we have alternatives in {origin}.",
+                "available_equipment_in_city": equipos_disponibles,
+                "alternative_loads": city_loads
+            }
+            
+    # 3. Si solo pregunta "qué tienes en Chicago" (sin especificar equipo)
+    return {
+        "match_found": True, 
+        "loads": city_loads
+    }
 #------------------------------
 # Save call logs
 #--------------------------------
