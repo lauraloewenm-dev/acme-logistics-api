@@ -166,4 +166,24 @@ def generate_pdf(request: Request, load_id: str, carrier_name: str = "Carrier", 
 
 @app.get("/get-logs", dependencies=[Depends(verify_api_key)])
 def get_logs():
-    return call_logs
+    # Creamos una copia de los logs para no romper la memoria
+    processed_logs = []
+    
+    for log in call_logs:
+        new_log = log.copy()
+        try:
+            # Limpiamos y convertimos agreed_rate a número
+            agreed = str(new_log.get('agreed_rate', '0')).replace('$', '').replace(',', '').strip()
+            new_log['agreed_rate'] = int(float(agreed)) if agreed else 0
+            
+            # Limpiamos y convertimos initial_rate a número
+            initial = str(new_log.get('initial_rate', '0')).replace('$', '').replace(',', '').strip()
+            new_log['initial_rate'] = int(float(initial)) if initial else 0
+        except:
+            # Si falla la conversión, ponemos 0 para que el dashboard no explote
+            new_log['agreed_rate'] = 0
+            new_log['initial_rate'] = 0
+            
+        processed_logs.append(new_log)
+        
+    return processed_logs
