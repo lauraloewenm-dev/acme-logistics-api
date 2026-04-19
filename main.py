@@ -94,6 +94,11 @@ class CallSummary(BaseModel):
     call_outcome: str
     carrier_sentiment: str
 
+if not os.path.exists("static"):
+    os.makedirs("static")
+
+# Esto permite que la gente acceda a https://tu-app.railway.app/static/archivo.pdf
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- 🚀 ENDPOINTS PROTEGIDOS ---
 
@@ -172,35 +177,41 @@ from fpdf import FPDF
 from fastapi.responses import FileResponse
 
 @app.get("/generate-pdf/{load_id}", dependencies=[Depends(verify_api_key)])
-def generate_pdf(load_id: str, carrier_name: Optional[str] = "Carrier", rate: Optional[str] = "0"):
-    # Limpieza de seguridad: si rate viene vacío o None, ponemos "0"
+def generate_pdf(request: Request, load_id: str, carrier_name: Optional[str] = "Carrier", rate: Optional[str] = "0"):
+    # Limpieza de seguridad
     if not rate or rate == "None" or rate == "":
         numeric_rate = 0
     else:
         try:
-            # Quitamos símbolos que la IA suele añadir
             clean_rate = str(rate).replace("$", "").replace(",", "").replace(".00", "").strip()
             numeric_rate = int(clean_rate)
         except:
             numeric_rate = 0
-    # 1. Crear el PDF
+
+    # Crear el PDF
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    pdf.set_font("Helvetica", "B", 16) # 'Arial' a veces da problemas en Linux, Helvetica es más seguro
     
-    # Encabezado
     pdf.cell(200, 10, txt="ACME LOGISTICS - RATE CONFIRMATION", ln=True, align='C')
     pdf.ln(10)
     
-    # Contenido
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("Helvetica", size=12)
     pdf.cell(200, 10, txt=f"Load ID: {load_id}", ln=True)
     pdf.cell(200, 10, txt=f"Carrier: {carrier_name}", ln=True)
-    pdf.cell(200, 10, txt=f"Agreed Rate: ${rate}.00", ln=True)
+    pdf.cell(200, 10, txt=f"Agreed Rate: ${numeric_rate}.00", ln=True)
     pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True)
     
-    # Guardar temporalmente
-    file_path = f"confirmation_{load_id}.pdf"
+    file_name = f"confirmation_{load_id}.pdf"
+    file_path = f"static/{file_name}"
     pdf.output(file_path)
     
-    return FileResponse(file_path, filename=file_path, media_type='application/pdf')
+    # 4. Obtener la URL base de forma automática
+    base_url = str(request.base_url).rstrip("/")
+    full_pdf_url = f"{base_url}/static/{file_name}"
+    
+    return {
+        "status": "success",
+        "load_id": load_id,
+        "pdf_url": full_pdf_url
+    }
