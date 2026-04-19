@@ -7,7 +7,7 @@ import os
 st.set_page_config(page_title="Acme Analytics | AI Dispatch", layout="wide")
 
 # Recuerda cambiar esto por la URL real de tu API en Railway y tu API Key
-API_URL = "https://tu-api-en-railway.app" 
+API_URL = "https://ideal-commitment-production-d5ed.up.railway.app/" 
 API_KEY = "super-secret-acme-key" 
 
 st.title("🚛 Acme Logistics: AI Dispatcher Performance")
