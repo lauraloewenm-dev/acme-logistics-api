@@ -6,7 +6,7 @@ import os
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Acme Analytics | AI Dispatch", layout="wide")
 
-API_URL = "https://ideal-commitment-production-d5ed.up.railway.app"
+API_URL = "https://acme-logistics-api-production.up.railway.app"
 API_KEY = "super-secret-acme-key"
 
 st.title("🚛 Acme Logistics: AI Dispatcher Performance")
