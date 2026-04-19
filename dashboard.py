@@ -6,37 +6,27 @@ import os
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Acme Analytics | AI Dispatch", layout="wide")
 
-# Recuerda cambiar esto por la URL real de tu API en Railway y tu API Key
-API_URL = "https://ideal-commitment-production-d5ed.up.railway.app".strip()
-API_KEY = "super-secret-acme-key".strip()
+API_URL = "https://ideal-commitment-production-d5ed.up.railway.app"
+API_KEY = "super-secret-acme-key"
 
 st.title("🚛 Acme Logistics: AI Dispatcher Performance")
 st.markdown("Real-time business impact and negotiation analytics from the HappyRobot AI Voice Agent.")
 
 # --- OBTENER DATOS ---
-@st.cache_data(ttl=5) # Refresca los datos cada 5 segundos
+@st.cache_data(ttl=5)
 def fetch_logs():
     try:
         headers = {"X-API-Key": API_KEY}
-        url = f"{API_URL}/get-logs"
-        response = requests.get(url, headers=headers)
+        response = requests.get(f"{API_URL}/get-logs", headers=headers)
         
         if response.status_code == 200:
-            data = response.json()
-            if not data:
-                st.warning("⚠️ Conexión exitosa, pero la base de datos dice que hay 0 logs.")
-            return pd.DataFrame(data)
-        else:
-            # Si falla la contraseña o la API, nos lo dirá en rojo
-            st.error(f"❌ Error de la API: Código {response.status_code} - {response.text}")
-            return pd.DataFrame()
-            
-    except Exception as e:
-        # Si la URL está mal escrita o caída, nos dirá el motivo
-        st.error(f"❌ Error crítico de conexión: {e}")
-        return pd.DataFrame()
-        if response.status_code == 200:
-            return pd.DataFrame(response.json())
+            try:
+                # Esto es lo que fallaba antes. Si no es un JSON, ahora no explotará.
+                data = response.json()
+                return pd.DataFrame(data)
+            except:
+                st.error("⚠️ La API está conectada, pero no está enviando datos en formato JSON. Verifica tu servidor en Railway.")
+                return pd.DataFrame()
         return pd.DataFrame()
     except:
         return pd.DataFrame()
@@ -46,13 +36,10 @@ df = fetch_logs()
 if df.empty:
     st.info("Waiting for Laura (AI) to make the first calls... Data will appear here automatically.")
 else:
-    # --- PROCESAMIENTO DE DATOS (El corazón del negocio) ---
-    # Convertimos a números por si acaso
+    # --- PROCESAMIENTO DE DATOS ---
     df['agreed_rate'] = pd.to_numeric(df['agreed_rate'], errors='coerce').fillna(0)
     df['initial_rate'] = pd.to_numeric(df['initial_rate'], errors='coerce').fillna(0)
     
-    # Métrica Clave: Cuánto dinero nos ha ahorrado la IA (Initial - Agreed)
-    # Solo calculamos el ahorro si la carga se reservó (Booked)
     df['ai_savings'] = df.apply(
         lambda row: (row['initial_rate'] - row['agreed_rate']) if 'booked' in str(row['call_outcome']).lower() else 0, 
         axis=1
@@ -63,7 +50,7 @@ else:
     total_calls = len(df)
     success_rate = (total_booked / total_calls) * 100 if total_calls > 0 else 0
 
-    # --- KPI METRICS (Para el Director de Operaciones) ---
+    # --- KPI METRICS ---
     st.markdown("### 📈 Executive KPI Summary")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total AI Savings (Profit)", f"${total_savings:,.2f}", "Added to Margin")
@@ -79,7 +66,6 @@ else:
     
     with col_chart1:
         st.markdown("#### 💰 Negotiation Performance by Carrier")
-        # Mostrar Initial vs Agreed
         chart_data = df[df['ai_savings'] > 0][['carrier_name', 'initial_rate', 'agreed_rate']]
         if not chart_data.empty:
             chart_data.set_index('carrier_name', inplace=True)
@@ -88,7 +74,6 @@ else:
             st.write("No successful negotiations to display yet.")
 
     with col_chart2:
-        # AQUÍ ES DONDE APRUEBAS: Actionable Insights (Del Checklist)
         st.markdown("#### 🎯 Actionable Operations Insights")
         st.info(f"**Insight 1:** Laura (AI) is saving an average of **${avg_savings:.2f}** per booked load.")
         
