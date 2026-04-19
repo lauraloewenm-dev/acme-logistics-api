@@ -7,8 +7,8 @@ import os
 st.set_page_config(page_title="Acme Analytics | AI Dispatch", layout="wide")
 
 # Recuerda cambiar esto por la URL real de tu API en Railway y tu API Key
-API_URL = "https://ideal-commitment-production-d5ed.up.railway.app" 
-API_KEY = "super-secret-acme-key" 
+API_URL = "https://ideal-commitment-production-d5ed.up.railway.app".strip()
+API_KEY = "super-secret-acme-key".strip()
 
 st.title("🚛 Acme Logistics: AI Dispatcher Performance")
 st.markdown("Real-time business impact and negotiation analytics from the HappyRobot AI Voice Agent.")
@@ -18,7 +18,23 @@ st.markdown("Real-time business impact and negotiation analytics from the HappyR
 def fetch_logs():
     try:
         headers = {"X-API-Key": API_KEY}
-        response = requests.get(f"{API_URL}/get-logs", headers=headers)
+        url = f"{API_URL}/get-logs"
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if not data:
+                st.warning("⚠️ Conexión exitosa, pero la base de datos dice que hay 0 logs.")
+            return pd.DataFrame(data)
+        else:
+            # Si falla la contraseña o la API, nos lo dirá en rojo
+            st.error(f"❌ Error de la API: Código {response.status_code} - {response.text}")
+            return pd.DataFrame()
+            
+    except Exception as e:
+        # Si la URL está mal escrita o caída, nos dirá el motivo
+        st.error(f"❌ Error crítico de conexión: {e}")
+        return pd.DataFrame()
         if response.status_code == 200:
             return pd.DataFrame(response.json())
         return pd.DataFrame()
