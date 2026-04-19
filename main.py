@@ -24,35 +24,38 @@ FMCSA_API_KEY = os.getenv("FMCSA_KEY")
 
 # --- ENDPOINTS ---
 
+
 @app.get("/verify-carrier/{mc_number}")
 def verify_carrier(mc_number: str):
-    # Asegurarnos de que lee la API Key
     api_key = os.getenv("FMCSA_KEY")
     
-    url = f"https://mobile.fmcsa.dot.gov/qc/services/get-carrier-data.json?number={mc_number}&key={api_key}"
+    # La URL oficial corregida con "webKey"
+    url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/docket-number/{mc_number}?webKey={api_key}"
+    
+    # El disfraz de navegador
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     
     try:
-        # Aumentamos a 15 segundos porque el servidor del gobierno suele ser lento
-        response = requests.get(url, timeout=15)
-        
-        # Si el gobierno nos bloquea (ej. Error 403), esto lo detectará
-        response.raise_for_status()
-        
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status() # Esto hará saltar el error si hay un 403
         data = response.json()
         
         if "content" in data and data["content"]:
             carrier = data["content"][0]["carrier"]
-            status = carrier.get("commonStatus", "")
-            if status == "Active" or status == "Authorized":
-                return {"valid": True, "name": carrier.get("legalName"), "status": status}
+            status = carrier.get("statusCode", "")
+            allowed = carrier.get("allowedToOperate", "N")
+            
+            # El gobierno usa statusCode 'A' para Activo y allowedToOperate 'Y' para Yes
+            if status == "A" or allowed == "Y":
+                return {"valid": True, "name": carrier.get("legalName"), "status": "Active"}
                 
         return {"valid": False, "message": "Carrier not authorized or inactive."}
         
-    except requests.exceptions.Timeout:
-        return {"valid": False, "message": "Error: La web del gobierno ha tardado más de 15 segundos en responder."}
     except Exception as e:
-        # ¡EL CHIVATO! Esto nos dirá el error exacto en HappyRobot
-        return {"valid": False, "message": f"Error real de conexión: {str(e)}"}
+        # Si Railway choca contra el muro, HappyRobot nos mostrará este mensaje exacto
+        return {"valid": False, "message": f"Fallo desde Railway: {str(e)}"}
 
 @app.get("/get-loads")
 def get_loads(origin: str, equipment: Optional[str] = None):
