@@ -1,8 +1,8 @@
 import os
+import random
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
-# IMPORTANTE: Hemos añadido 'Request' aquí
 from fastapi import FastAPI, HTTPException, Depends, Request
 from pydantic import BaseModel
 
@@ -12,39 +12,76 @@ app = FastAPI(title="Acme Logistics Enterprise API")
 API_KEY_SECRET = os.getenv("MY_API_KEY", "super-secret-acme-key")
 
 def verify_api_key(request: Request):
-    # Opción 1: Comprueba si HappyRobot lo mandó como Header personalizado (X-API-Key)
+    # Opción 1: Comprueba si llega como Header personalizado (X-API-Key)
     api_key = request.headers.get("X-API-Key")
     if api_key == API_KEY_SECRET:
         return api_key
         
-    # Opción 2: Comprueba si lo mandó por el desplegable "Authorization" (Bearer Token)
+    # Opción 2: Comprueba si llega por el estándar Authorization (Bearer Token)
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1] # Extrae solo la clave sin la palabra "Bearer"
+        token = auth_header.split(" ")[1]
         if token == API_KEY_SECRET:
             return token
             
-    # Si no llega de ninguna de las dos formas o está mal, bloqueamos
     raise HTTPException(status_code=403, detail="Acceso denegado: API Key inválida")
 
-# --- 📦 BASE DE DATOS SIMULADA ---
-# (A partir de aquí, deja tu load_board y el resto del código exactamente igual)
 
+# --- 📦 GENERADOR AUTOMÁTICO DE BASE DE DATOS ---
+def generar_base_de_datos(cantidad=150):
+    ciudades = [
+        "Chicago, IL", "Dallas, TX", "Miami, FL", "Los Angeles, CA", 
+        "Newark, NJ", "Atlanta, GA", "Denver, CO", "Seattle, WA", 
+        "Phoenix, AZ", "Columbus, OH", "Savannah, GA", "Houston, TX",
+        "Charlotte, NC", "Kansas City, MO", "Laredo, TX"
+    ]
+    
+    equipos_info = {
+        "Dry Van": {"commodities": ["Electronics", "Auto Parts", "Textiles", "General Cargo", "Paper Products"], "dims": "53ft"},
+        "Reefer": {"commodities": ["Produce", "Frozen Food", "Dairy", "Pharmaceuticals", "Fresh Meat"], "dims": "53ft"},
+        "Flatbed": {"commodities": ["Lumber", "Steel Coils", "Machinery", "Building Materials", "Concrete Pipes"], "dims": "48ft"}
+    }
 
-# --- 📦 BASE DE DATOS SIMULADA ---
-load_board = [
-    {"load_id": "US-9901", "origin": "Chicago, IL", "destination": "Dallas, TX", "pickup_datetime": "2026-04-20 08:00", "delivery_datetime": "2026-04-22 18:00", "equipment_type": "Dry Van", "loadboard_rate": 2400, "weight": 42000, "commodity_type": "Electronics", "num_of_pieces": 22, "miles": 920, "dimensions": "53ft", "hazmat": False, "notes": "No touch freight"},
-    {"load_id": "US-9902", "origin": "Houston, TX", "destination": "Miami, FL", "pickup_datetime": "2026-04-21 06:00", "delivery_datetime": "2026-04-23 12:00", "equipment_type": "Reefer", "loadboard_rate": 3100, "weight": 35000, "commodity_type": "Frozen Food", "num_of_pieces": 18, "miles": 1180, "dimensions": "48ft", "hazmat": False, "notes": "Maintain -10 degrees"},
-    {"load_id": "US-9903", "origin": "Savannah, GA", "destination": "Nashville, TN", "pickup_datetime": "2026-04-20 14:00", "delivery_datetime": "2026-04-21 09:00", "equipment_type": "Flatbed", "loadboard_rate": 1550, "weight": 45000, "commodity_type": "Steel Coils", "num_of_pieces": 4, "miles": 490, "dimensions": "48ft", "hazmat": False, "notes": "Tarping required"},
-    {"load_id": "US-9904", "origin": "Los Angeles, CA", "destination": "Phoenix, AZ", "pickup_datetime": "2026-04-22 07:00", "delivery_datetime": "2026-04-22 20:00", "equipment_type": "Dry Van", "loadboard_rate": 1100, "weight": 12000, "commodity_type": "Textiles", "num_of_pieces": 10, "miles": 370, "dimensions": "53ft", "hazmat": False, "notes": "High value load"},
-    {"load_id": "US-9905", "origin": "Newark, NJ", "destination": "Cleveland, OH", "pickup_datetime": "2026-04-20 10:00", "delivery_datetime": "2026-04-21 06:00", "equipment_type": "Dry Van", "loadboard_rate": 1900, "weight": 38000, "commodity_type": "General Cargo", "num_of_pieces": 24, "miles": 430, "dimensions": "53ft", "hazmat": True, "notes": "Hazmat certified only"},
-    {"load_id": "US-9906", "origin": "Denver, CO", "destination": "Salt Lake City, UT", "pickup_datetime": "2026-04-23 08:00", "delivery_datetime": "2026-04-23 20:00", "equipment_type": "Reefer", "loadboard_rate": 1450, "weight": 40000, "commodity_type": "Produce", "num_of_pieces": 20, "miles": 520, "dimensions": "53ft", "hazmat": False, "notes": "E-track required"},
-    {"load_id": "US-9907", "origin": "Laredo, TX", "destination": "Chicago, IL", "pickup_datetime": "2026-04-21 12:00", "delivery_datetime": "2026-04-24 08:00", "equipment_type": "Dry Van", "loadboard_rate": 3800, "weight": 44000, "commodity_type": "Auto Parts", "num_of_pieces": 26, "miles": 1350, "dimensions": "53ft", "hazmat": False, "notes": "Team drivers preferred"},
-    {"load_id": "US-9908", "origin": "Seattle, WA", "destination": "Portland, OR", "pickup_datetime": "2026-04-20 09:00", "delivery_datetime": "2026-04-20 15:00", "equipment_type": "Flatbed", "loadboard_rate": 850, "weight": 48000, "commodity_type": "Lumber", "num_of_pieces": 12, "miles": 175, "dimensions": "48ft", "hazmat": False, "notes": "Side kit needed"},
-    {"load_id": "US-9909", "origin": "Atlanta, GA", "destination": "Charlotte, NC", "pickup_datetime": "2026-04-22 11:00", "delivery_datetime": "2026-04-22 17:00", "equipment_type": "Dry Van", "loadboard_rate": 950, "weight": 15000, "commodity_type": "Paper Products", "num_of_pieces": 14, "miles": 245, "dimensions": "53ft", "hazmat": False, "notes": "Quick turn around"},
-    {"load_id": "US-9910", "origin": "Kansas City, MO", "destination": "Columbus, OH", "pickup_datetime": "2026-04-21 16:00", "delivery_datetime": "2026-04-22 10:00", "equipment_type": "Reefer", "loadboard_rate": 1750, "weight": 30000, "commodity_type": "Dairy", "num_of_pieces": 16, "miles": 650, "dimensions": "53ft", "hazmat": False, "notes": "Washout receipt required"}
-]
+    notas_comunes = ["No touch freight", "Tarping required", "Hazmat certified only", "Must have PPE", "Team drivers preferred", "Drop and hook", "Clean trailer required", ""]
+    
+    nuevas_cargas = []
+    
+    for i in range(1, cantidad + 1):
+        origen = random.choice(ciudades)
+        destino = random.choice([c for c in ciudades if c != origen])
+        equipo = random.choice(list(equipos_info.keys()))
+        commodity = random.choice(equipos_info[equipo]["commodities"])
+        
+        precio_base = random.randint(80, 450) * 10 
+        peso = random.randint(15, 45) * 1000
+        
+        dias_adelante = random.randint(0, 5)
+        fecha_pickup = datetime.now() + timedelta(days=dias_adelante)
+        fecha_delivery = fecha_pickup + timedelta(days=random.randint(1, 3))
 
+        carga = {
+            "load_id": f"US-{9000 + i}",
+            "origin": origen,
+            "destination": destino,
+            "pickup_datetime": fecha_pickup.strftime("%Y-%m-%d 08:00"),
+            "delivery_datetime": fecha_delivery.strftime("%Y-%m-%d 16:00"),
+            "equipment_type": equipo,
+            "loadboard_rate": precio_base,
+            "weight": peso,
+            "commodity_type": commodity,
+            "num_of_pieces": random.randint(1, 30),
+            "miles": random.randint(200, 2000),
+            "dimensions": equipos_info[equipo]["dims"],
+            "hazmat": random.choice([True, False, False, False]),
+            "notes": random.choice(notas_comunes),
+            "status": "Available"  # <--- NUEVO: Estado inicial
+        }
+        nuevas_cargas.append(carga)
+        
+    return nuevas_cargas
+
+# Generamos las cargas al arrancar el servidor
+load_board = generar_base_de_datos(cantidad=150)
 call_logs = []
 
 class CallSummary(BaseModel):
@@ -71,49 +108,32 @@ def verify_carrier(mc_number: str):
             data = response.json()
             if "content" in data and len(data["content"]) > 0:
                 carrier_info = data["content"][0].get("carrier", {})
-                return {
-                    "valid": True, 
-                    "name": carrier_info.get("legalName", "Global Logistics LLC"), 
-                    "status": "Active"
-                }
+                return {"valid": True, "name": carrier_info.get("legalName", "Global Logistics LLC"), "status": "Active"}
         
         nombres_fake = ["Blue Anchor Trans", "Swift Haulage Inc", "Eagle Eye Logistics", "Summit Trucking"]
         nombre_elegido = nombres_fake[int(mc_number) % len(nombres_fake)] if mc_number.isdigit() else "Ace Logistics"
-        
-        return {
-            "valid": True, 
-            "name": f"{nombre_elegido} (MC {mc_number})", 
-            "status": "Active"
-        }
+        return {"valid": True, "name": f"{nombre_elegido} (MC {mc_number})", "status": "Active"}
         
     except Exception:
-        return {
-            "valid": True, 
-            "name": "Acme Partner Carrier", 
-            "status": "Active"
-        }
+        return {"valid": True, "name": "Acme Partner Carrier", "status": "Active"}
 
 
 @app.get("/get-loads", dependencies=[Depends(verify_api_key)])
 def get_loads(origin: str, equipment: Optional[str] = None):
     search_origin = origin.lower().strip()
-    city_loads = [l for l in load_board if search_origin in l["origin"].lower()]
+    
+    # <--- NUEVO: Solo filtramos las que están "Available"
+    city_loads = [l for l in load_board if search_origin in l["origin"].lower() and l.get("status") == "Available"]
     
     if not city_loads:
-        return {
-            "match_found": False, 
-            "message": f"No loads available in {origin} at the moment."
-        }
+        return {"match_found": False, "message": f"No loads available in {origin} at the moment."}
     
     if equipment:
         search_equip = equipment.lower().strip()
         exact_matches = [l for l in city_loads if search_equip in l["equipment_type"].lower()]
         
         if exact_matches:
-            return {
-                "match_found": True, 
-                "loads": exact_matches
-            }
+            return {"match_found": True, "loads": exact_matches}
         else:
             equipos_disponibles = list(set([l["equipment_type"] for l in city_loads]))
             return {
@@ -123,10 +143,7 @@ def get_loads(origin: str, equipment: Optional[str] = None):
                 "alternative_loads": city_loads
             }
             
-    return {
-        "match_found": True, 
-        "loads": city_loads
-    }
+    return {"match_found": True, "loads": city_loads}
 
 
 @app.post("/log-call", dependencies=[Depends(verify_api_key)])
@@ -134,6 +151,14 @@ def log_call(summary: CallSummary):
     log_entry = summary.dict()
     log_entry["timestamp"] = datetime.now().isoformat()
     call_logs.append(log_entry)
+
+    # <--- NUEVO: Lógica para marcar la carga como "Booked"
+    if summary.call_outcome == "Booked" and summary.load_id:
+        for load in load_board:
+            if load["load_id"] == summary.load_id:
+                load["status"] = "Booked"
+                break
+
     return {"status": "success", "message": "Call logged successfully"}
 
 
