@@ -26,17 +26,33 @@ FMCSA_API_KEY = os.getenv("FMCSA_KEY")
 
 @app.get("/verify-carrier/{mc_number}")
 def verify_carrier(mc_number: str):
-    url = f"https://mobile.fmcsa.dot.gov/qc/services/get-carrier-data.json?number={mc_number}&key={FMCSA_API_KEY}"
+    # Asegurarnos de que lee la API Key
+    api_key = os.getenv("FMCSA_KEY")
+    
+    url = f"https://mobile.fmcsa.dot.gov/qc/services/get-carrier-data.json?number={mc_number}&key={api_key}"
+    
     try:
-        response = requests.get(url, timeout=5).json()
-        if "content" in response and response["content"]:
-            carrier = response["content"][0]["carrier"]
+        # Aumentamos a 15 segundos porque el servidor del gobierno suele ser lento
+        response = requests.get(url, timeout=15)
+        
+        # Si el gobierno nos bloquea (ej. Error 403), esto lo detectará
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if "content" in data and data["content"]:
+            carrier = data["content"][0]["carrier"]
             status = carrier.get("commonStatus", "")
             if status == "Active" or status == "Authorized":
                 return {"valid": True, "name": carrier.get("legalName"), "status": status}
+                
         return {"valid": False, "message": "Carrier not authorized or inactive."}
-    except:
-        return {"valid": False, "message": "Verification system unavailable."}
+        
+    except requests.exceptions.Timeout:
+        return {"valid": False, "message": "Error: La web del gobierno ha tardado más de 15 segundos en responder."}
+    except Exception as e:
+        # ¡EL CHIVATO! Esto nos dirá el error exacto en HappyRobot
+        return {"valid": False, "message": f"Error real de conexión: {str(e)}"}
 
 @app.get("/get-loads")
 def get_loads(origin: str, equipment: Optional[str] = None):
