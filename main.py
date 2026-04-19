@@ -172,7 +172,17 @@ from fpdf import FPDF
 from fastapi.responses import FileResponse
 
 @app.get("/generate-pdf/{load_id}", dependencies=[Depends(verify_api_key)])
-def generate_pdf(load_id: str, carrier_name: str, rate: int):
+def generate_pdf(load_id: str, carrier_name: Optional[str] = "Carrier", rate: Optional[str] = "0"):
+    # Limpieza de seguridad: si rate viene vacío o None, ponemos "0"
+    if not rate or rate == "None" or rate == "":
+        numeric_rate = 0
+    else:
+        try:
+            # Quitamos símbolos que la IA suele añadir
+            clean_rate = str(rate).replace("$", "").replace(",", "").replace(".00", "").strip()
+            numeric_rate = int(clean_rate)
+        except:
+            numeric_rate = 0
     # 1. Crear el PDF
     pdf = FPDF()
     pdf.add_page()
