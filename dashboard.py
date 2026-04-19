@@ -12,7 +12,7 @@ st.markdown("Real-time performance metrics and insights for the Acme AI Dispatch
 st.divider()
 
 # --- Obtención de Datos (Ajusta la URL a tu Railway) ---
-API_URL = "https://TU_RAILWAY_URL.up.railway.app/get-logs" 
+API_URL = "https://acme-logistics-api-production.up.railway.app/get-logs" 
 
 @st.cache_data(ttl=5) # Refresca cada 5 segundos
 def fetch_data():
