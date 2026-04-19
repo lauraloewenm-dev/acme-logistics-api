@@ -165,3 +165,32 @@ def log_call(summary: CallSummary):
 @app.get("/get-logs", dependencies=[Depends(verify_api_key)])
 def get_logs():
     return call_logs
+
+
+
+from fpdf import FPDF
+from fastapi.responses import FileResponse
+
+@app.get("/generate-pdf/{load_id}", dependencies=[Depends(verify_api_key)])
+def generate_pdf(load_id: str, carrier_name: str, rate: int):
+    # 1. Crear el PDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    
+    # Encabezado
+    pdf.cell(200, 10, txt="ACME LOGISTICS - RATE CONFIRMATION", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Contenido
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"Load ID: {load_id}", ln=True)
+    pdf.cell(200, 10, txt=f"Carrier: {carrier_name}", ln=True)
+    pdf.cell(200, 10, txt=f"Agreed Rate: ${rate}.00", ln=True)
+    pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True)
+    
+    # Guardar temporalmente
+    file_path = f"confirmation_{load_id}.pdf"
+    pdf.output(file_path)
+    
+    return FileResponse(file_path, filename=file_path, media_type='application/pdf')
