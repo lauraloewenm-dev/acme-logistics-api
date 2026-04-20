@@ -144,7 +144,7 @@ def verify_carrier(mc_number: str):
         return {"valid": True, "name": f"Carrier Provisorio MC{clean_mc}", "status": "Active (Falta Key)"}
 
     # Fíjate que ahora enviamos 'clean_mc' al gobierno, asegurando que solo van números
-    fmcsa_url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/{clean_mc}?webKey={FMCSA_API_KEY}"
+    fmcsa_url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/docket-number/{clean_mc}?webKey={FMCSA_API_KEY}"
     
     try:
         response = requests.get(fmcsa_url, timeout=10)
