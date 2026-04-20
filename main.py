@@ -122,18 +122,30 @@ def startup_event():
     db.close()
 
 # --- 🚀 ENDPOINTS PRINCIPALES ---
+import re # Asegúrate de que esto está en los imports de arriba del todo en main.py
+
 @app.get("/verify-carrier/{mc_number}", dependencies=[Depends(verify_api_key)])
 def verify_carrier(mc_number: str):
-    # 1. MODO DEMO / BYPASS (Para el vídeo)
+    # --- 0. SANITIZACIÓN DE DATOS (El Filtro Mágico) ---
+    # Esto coge "MC12423" o "MC 12423" y lo convierte automáticamente en "12423"
+    clean_mc = "".join(filter(str.isdigit, mc_number))
+    
+    # Si por algún motivo no hay números, devolvemos error rápido
+    if not clean_mc:
+        return {"valid": False, "name": "Formato Incorrecto", "status": "Invalid MC"}
+
+    # --- 1. MODO DEMO / BYPASS (Para el vídeo) ---
     bypass_numbers = ["1234", "0000", "9999", "1111"]
-    if mc_number in bypass_numbers or len(mc_number) == 4:
+    if clean_mc in bypass_numbers or len(clean_mc) == 4:
         return {"valid": True, "name": "Acme Demo Carrier (Bypass Activo)", "status": "Authorized - Bypass"}
 
-    # 2. INTEGRACIÓN REAL FMCSA (Para el sobresaliente)
+    # --- 2. INTEGRACIÓN REAL FMCSA (Para el sobresaliente) ---
     if not FMCSA_API_KEY:
-        return {"valid": True, "name": f"Carrier Provisorio MC{mc_number}", "status": "Active (Falta Key)"}
+        return {"valid": True, "name": f"Carrier Provisorio MC{clean_mc}", "status": "Active (Falta Key)"}
 
-    fmcsa_url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/{mc_number}?webKey={FMCSA_API_KEY}"
+    # Fíjate que ahora enviamos 'clean_mc' al gobierno, asegurando que solo van números
+    fmcsa_url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/{clean_mc}?webKey={FMCSA_API_KEY}"
+    
     try:
         response = requests.get(fmcsa_url, timeout=10)
         if response.status_code == 200:
@@ -141,7 +153,7 @@ def verify_carrier(mc_number: str):
             content = data.get("content", [])
             if content and isinstance(content, list):
                 carrier_data = content[0]
-                legal_name = carrier_data.get("legalName", f"Carrier Desconocido MC{mc_number}")
+                legal_name = carrier_data.get("legalName", f"Carrier Desconocido MC{clean_mc}")
                 allow_to_operate = carrier_data.get("allowToOperate", "N")
                 is_valid = (allow_to_operate == "Y")
                 return {"valid": is_valid, "name": legal_name, "status": "Authorized" if is_valid else "Out of Service"}
@@ -150,8 +162,7 @@ def verify_carrier(mc_number: str):
         else:
             return {"valid": False, "name": "Error del Servidor", "status": "FMCSA Down"}
     except Exception as e:
-        return {"valid": True, "name": f"Carrier de Emergencia MC{mc_number}", "status": "Active"}
-
+        return {"valid": True, "name": f"Carrier de Emergencia MC{clean_mc}", "status": "Active"}
 @app.get("/get-loads", dependencies=[Depends(verify_api_key)])
 def get_loads(origin: str, db: Session = Depends(get_db)):
     search_origin = origin.lower().strip()
