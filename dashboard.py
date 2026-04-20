@@ -102,25 +102,42 @@ else:
     # ==========================================
     with tab2:
         st.markdown("### 🗺️ Live Network Availability")
-        # Diccionario de coordenadas para simular el mapa basado en el origen de las cargas
+        
+        # 1. Coordenadas completas (¡Ahora sí están todas!)
         coords_map = {
             "Chicago, IL": [41.8781, -87.6298], "Dallas, TX": [32.7767, -96.7970],
             "Miami, FL": [25.7617, -80.1918], "Los Angeles, CA": [34.0522, -118.2437],
             "Atlanta, GA": [33.7490, -84.3880], "Seattle, WA": [47.6062, -122.3321],
-            "Denver, CO": [39.7392, -104.9903], "Newark, NJ": [40.7357, -74.1724]
+            "Newark, NJ": [40.7357, -74.1724], "Denver, CO": [39.7392, -104.9903]
         }
         
         if not df_loads.empty:
-            # Añadimos Lat y Lon al dataframe de cargas para dibujarlo en el mapa
+            # Asignar lat y lon
             df_loads['lat'] = df_loads['origin'].map(lambda x: coords_map.get(x, [0,0])[0])
             df_loads['lon'] = df_loads['origin'].map(lambda x: coords_map.get(x, [0,0])[1])
-            df_map = df_loads[df_loads['lat'] != 0] # Filtramos las que no tienen coordenadas
             
-            st.map(df_map[['lat', 'lon']], zoom=3, use_container_width=True)
-            st.caption("Heatmap of currently available loads waiting for AI dispatch.")
-        else:
-            st.info("No active loads on the board to display on the map.")
+            # Filtramos las que tienen coordenadas válidas
+            valid_loads = df_loads[df_loads['lat'] != 0].copy()
+            
+            # Agrupamos para saber el volumen de cargas por ciudad
+            city_counts = valid_loads.groupby('origin').size().reset_index(name='Load Count')
+            city_counts['lat'] = city_counts['origin'].map(lambda x: coords_map.get(x)[0])
+            city_counts['lon'] = city_counts['origin'].map(lambda x: coords_map.get(x)[1])
 
+            # 2. MAPA INTERACTIVO PRO
+            fig_map = px.scatter_mapbox(
+                city_counts, lat="lat", lon="lon", hover_name="origin", 
+                hover_data={"Load Count": True, "lat": False, "lon": False},
+                size="Load Count", color_discrete_sequence=["#3b82f6"], 
+                zoom=3, height=450
+            )
+            fig_map.update_layout(
+                mapbox_style="carto-darkmatter", 
+                margin={"r":0,"t":0,"l":0,"b":0}
+            )
+            st.plotly_chart(fig_map, use_container_width=True)
+        else:
+            st.info("No active loads on the board.")
         st.divider()
 
         col_corr1, col_corr2 = st.columns(2)
